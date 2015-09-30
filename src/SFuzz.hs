@@ -15,31 +15,27 @@ module SFuzz (
   Database, Epsilon,
   BudgetedDB,
   SFuzz, exportVal,
-  trustingFuzz
+  trustingFuzz, createBudgetedDB, runSFuzz -- These three are scary to export
 ) where
 
 --import Language.Haskell.TH.Syntax
 import Control.Monad (ap)
 import Control.Applicative
-
--- | I am arbitrarily setting that a Database is a list of ints.
-type Database = [Int]
-
--- | The epsilon value for privacy budget is a Double.
-type Epsilon = Double
+import Types
+import PMonad
 
 -- | A database along with its privacy budget.
-newtype BudgetedDB = BudgetedDB (Database, Epsilon)
+newtype BudgetedDB = BudgetedDB (Database Int, Epsilon)
 
 -- | The constructor/destructor for BudgetedDB is not exported, so we 
 --  provide a smart constructor for it.
-createBudgetedDB :: Database -> Epsilon -> BudgetedDB
+createBudgetedDB :: Database Int -> Epsilon -> BudgetedDB
 createBudgetedDB = curry BudgetedDB
 
 -- | The function takes a budgeted database and an operation with 
 --  associated epsilon use, and, if the database can handle this much 
 --  epsilon, it returns the result.  Otherwise, it returns Nothing.
-useDB :: BudgetedDB -> (Epsilon, Database -> a) -> Maybe a
+useDB :: BudgetedDB -> (Epsilon, Database Int -> a) -> Maybe a
 useDB (BudgetedDB (db, budget)) (eps, op) = if budget-eps < 0 then Nothing else Just (op db)
 
 -- Subtract the given amount of Epsilon from the budgeted DB.
@@ -86,23 +82,7 @@ exportVal s = SFuzz $ \_ k -> k (0, [s], Just ())
 --  asks for a computation using the database and the amount of epsilon 
 --  that computation uses and trusts the caller that this epsilon is 
 --  correct.
-trustingFuzz :: Epsilon -> (Database -> a) -> SFuzz r a
+trustingFuzz :: Epsilon -> P Int a -> SFuzz r a
 trustingFuzz eps op = SFuzz $ \db k ->
-    k (eps, [], useDB db (eps, op))
-
--- | A testing database.
-testDB = [5,1,2,3,4,5,5,6,7,8,8,8,9]
-
-test :: SFuzz r Int
-test = do
-  mean <- trustingFuzz 1 (\db -> sum db `div` length db)
-  exportVal $ show mean
-  hd <- trustingFuzz 1 head
-  exportVal $ show hd
-  s <- trustingFuzz (fromIntegral hd) sum
-  return s
-
-main = runSFuzz test (createBudgetedDB testDB 5) id
-
-
+    k (eps, [], useDB db (eps, runProb op))
 
