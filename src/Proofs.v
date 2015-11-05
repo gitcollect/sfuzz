@@ -2,6 +2,7 @@
 (* Require Import QArith. *)
 
 Require Import Arith.
+Require Import CaseNotation.
 
 Notation "x :: l" := (cons x l) (at level 60, right associativity).
 Notation "[ ]" := nil.
@@ -9,63 +10,46 @@ Notation "[ x ; .. ; y ]" := (cons x .. (cons y nil) ..).
 
 
 Inductive simList {X:Type} : nat -> list X -> list X -> Prop :=
-  | simL_eq l1 l2 : forall n, eq l1 l2 -> simList n l1 l2
-  | simL_cons h t1 t2 : forall n, simList n t1 t2 -> simList n (cons h t1) (cons h t2)
-  | simL_cons1 h1 l1 l2 : forall n, simList n l1 l2
-                         -> simList (S n) (cons h1 l1) l2
-  | simL_cons2 l1 h2 l2 : forall n, simList n l1 l2
-                         -> simList (S n) l1 (cons h2 l2)
-  | simL_weak l1 l2 : forall d, simList d l1 l2 -> simList (S d) l1 l2.
+  | simL_eq l1 l2      : forall d, eq l1 l2 -> simList d l1 l2
+  | simL_cons h t1 t2  : forall d, simList d t1 t2 
+                         -> simList d (cons h t1) (cons h t2)
+  | simL_consL h l1 l2 : forall d, simList d l1 l2
+                         -> simList (S d) (cons h l1) l2
+  | simL_consR h l1 l2 : forall d, simList d l1 l2
+                         -> simList (S d) l1 (cons h l2)
+  | simL_weak l1 l2    : forall d, simList d l1 l2 
+                         -> simList (S d) l1 l2.
 
 Example simEx1 : simList 1 [1;2] [2].
-Proof. apply simL_cons1. apply simL_eq. reflexivity. Qed.
+Proof. apply simL_consL. apply simL_eq. reflexivity. Qed.
 
 Example simEx2 : simList 1 [1;2;3;4] [1;3;4].
 Proof. apply simL_cons. 
-  apply simL_cons1. apply simL_eq. reflexivity. Qed.
+  apply simL_consL. apply simL_eq. reflexivity. Qed.
 
-Example simEx3 : simList 1 [] [1].
-Proof. apply simL_cons2. apply simL_eq. reflexivity. Qed.
+Example simEx3 : simList 2 [2] [1].
+Proof. apply simL_consR. apply simL_consL. apply simL_eq. reflexivity. Qed.
 
-Lemma listConsEq : forall (X:Type) (a:X) l1 l2,
-  l1 = l2 -> a::l1 = a::l2.
-Proof. intros. rewrite H. reflexivity. Qed.
-
-Lemma listConsEq' : forall (X:Type) (a:X) l1 l2,
-  a::l1 = a::l2 -> l1 = l2.
-Proof. intros. inversion H. reflexivity. Qed.
-
-Lemma simLZeroEq : forall (X:Type) (l1 l2:list X),
-  simList 0 l1 l2 -> l1 = l2.
-Proof. intros X l1. induction l1. intros.
-  inversion H. apply H0.
-  intros. induction l2. inversion H. inversion H0.
-  inversion H. apply H0.
-  apply listConsEq. apply IHl1. apply H2.
-Qed.
-
-(*
-Lemma simLOneOff : forall (X:Type) (x1 x2:X) (l1 l2:list X),
-  simL 1 (x1::l1) (x2::l2) -> x1<>x2 -> l1 = l2.
-*)
 
 Inductive all {X : Type} (P : X -> Prop) : list X -> Prop :=
   | all_nil : all P []
   | all_cons x l : P x -> all P l -> all P (x :: l).
 
+
 Inductive simNat : nat -> nat -> nat -> Prop :=
-  | simN_eq n1 n2 : forall d, eq_nat n1 n2 -> simNat d n1 n2
-  | simN_S n1 n2 : forall d, simNat d n1 n2 -> simNat d (S n1) (S n2)
-  | simN_l n1 n2 : forall d, simNat d n1 n2 -> simNat (S d) (S n1) n2
-  | simN_r n1 n2 : forall d, simNat d n1 n2 -> simNat (S d) n1 (S n2)
+  | simN_eq n1 n2   : forall d, eq_nat n1 n2 -> simNat d n1 n2
+  | simN_S n1 n2    : forall d, simNat d n1 n2 -> simNat d (S n1) (S n2)
+  | simN_l n1 n2    : forall d, simNat d n1 n2 -> simNat (S d) (S n1) n2
+  | simN_r n1 n2    : forall d, simNat d n1 n2 -> simNat (S d) n1 (S n2)
   | simN_weak n1 n2 : forall d, simNat d n1 n2 -> simNat (S d) n1 n2.
 
 Lemma simNatPlus : forall (d n s1 s2 : nat),
   simNat d s1 s2 -> simNat d (n+s1) (n+s2).
-Proof. intros. induction n.
+Proof. intros d n s1 s2 H. induction n as [| n' IHn].
   simpl. apply H.
   simpl. apply simN_S. apply IHn.
 Qed.
+
 
 Fixpoint sumList (l : list nat) : nat :=
   match l with
@@ -83,21 +67,45 @@ Lemma foo : forall (Arg Arg' : list nat) (d:nat),
   all (fun x => x <= 1) Arg ->
   all (fun x => x <= 1) Arg' ->
   simNat d (sumList Arg) (sumList Arg').
-Proof. intros. induction H.
-  rewrite H. apply simN_eq. apply eq_nat_refl.
-  simpl. apply simNatPlus. apply IHsimList.
-    inversion H0. apply H5. inversion H1. apply H5.
-  inversion H0. inversion H4. simpl. apply simN_l. apply IHsimList.
-    apply H5. apply H1.
-    inversion H7. simpl. apply simN_weak. apply IHsimList.
-      apply H5. apply H1.
-  inversion H1. inversion H4. simpl. apply simN_r. apply IHsimList.
-    apply H0. apply H5.
-    inversion H7. simpl. apply simN_weak. apply IHsimList.
-      apply H0. apply H5.
-  apply simN_weak. apply IHsimList. apply H0. apply H1.
+Proof. intros Arg Arg' d HListSim HArgClip HArg'Clip.
+induction HListSim as [l1 l2 d eq |
+                       h l1 l2 d HListSim' IHLS|
+                       h l1 l2 d HListSim' IHLS|
+                       h l1 l2 d HListSim' IHLS|
+                       h l1 l2 d IHd].
+  Case "eq".
+    rewrite eq. apply simN_eq. apply eq_nat_refl.
+  Case "cons".
+    simpl. apply simNatPlus. apply IHLS.
+    inversion HArgClip as [ | x l HLT1 HLTTail].
+      apply HLTTail.
+    inversion HArg'Clip as [asdf | x l HLT1 HLTTail].
+      apply HLTTail.
+  Case "consL".
+    inversion HArgClip as [asdf | x l HLT1 HLTTail].
+    inversion HLT1 as [ | x' HLT0].
+    SCase "head is 1".
+      simpl. apply simN_l. apply IHLS.
+      apply HLTTail. apply HArg'Clip.
+    SCase "head is 0".
+      inversion HLT0.
+      simpl. apply simN_weak. apply IHLS.
+        apply HLTTail. apply HArg'Clip.
+  Case "consR".
+    inversion HArg'Clip as [ | x l HLT1 HLTTail].
+    inversion HLT1 as [ | x' HLT0].
+    SCase "head is 1".
+      simpl. apply simN_r. apply IHLS.
+      apply HArgClip. apply HLTTail.
+    SCase "head is 0".
+      inversion HLT0.
+      simpl. apply simN_weak. apply IHLS.
+        apply HArgClip. apply HLTTail.
+  Case "weakening".
+    apply simN_weak. apply IHd.
+    apply HArgClip. apply HArg'Clip.
 Qed.
-
+    
 
 
 
