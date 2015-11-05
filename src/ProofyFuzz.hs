@@ -47,6 +47,6 @@ makePrecond name TClipNat = name++" <= 1"
 makePrecond name (TBag t) = "all (fun x => "++makePrecond "x" t++") "++name
 
 -- | This function creates a Coq version of the expression.
-makeExpr :: Name -> Type -> String
+makeExpr :: Name -> Expr -> String
 makeExpr arg Arg = arg
 makeExpr arg (Sum e) = "sumList "++makeExpr arg e
