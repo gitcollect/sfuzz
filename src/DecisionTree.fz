@@ -1,0 +1,177 @@
+
+
+//  'a tree = \mu t. bool + (t \otimes 'a \otimes t)
+type 'a tree = 
+    Leaf of bool 
+  | Node ('a tree) * 'a * ('a tree)
+
+type delta = num
+type epsilon = num
+
+/*
+A database row is a list of bools.  The 0-indexed value is 
+ the label, and the parameters are indexed 1 through k.
+We need a function to make all the possible trees.
+There will be k*(number of leaves) possible trees.
+This will be some sort of concatmap over a fold.
+
+Missing Features:
+- case support for trees
+- add_exp_noise
+- execRedZone (fun : (bool list) bag -o[1] 'a) : (1 + ('a, delta, epsilon))
+
+*/
+
+// A list removal function
+function remove
+  (lst :[1] 'a list)
+  (ind : nat)
+  : 'a list
+  {
+    case lst of
+      []    => []
+    | x::xs => case ind of
+                  Z   => xs
+                | S n => x::(remove xs n)
+  }
+
+
+// An indexing function that returns the value at the index and returns 
+// the same list but with the indexed value now fixed as the default 
+// value.  If the index is out of bounds, this returns the given 
+// default value.
+function index
+  (def : 'a)
+  (lst :[1] 'a list)
+  (ind : nat)
+  : ('a, 'a list)
+  {
+    case lst of
+      []    => (def, [])
+    | x::xs => case ind of
+                  Z   => (x, def::xs)
+                | S n => let (res,rlst) = index def xs n
+                         in (res, x::rlst)
+  }
+
+
+// An infix version of index specialized to bool with default = False.
+function !
+  (lst : bool list)
+  (ind : nat)
+  : (bool, bool list)
+  { index False lst ind }
+
+
+// A min function over Circle nums.
+function min
+  (lst :[s] (Circle num) list)
+  :[1] nat
+  {
+    case lst of
+      []    => (0,0)
+      x::xs => minHelper xs 0 x
+  }
+function minHelper
+  (lst : (Circle num) list)
+  (bestIndex : nat)
+  (bestNum : num)
+  : nat
+  {
+    case lst of
+      []    => bestIndex - 1
+      x::xs => sample v = x;
+               1 + (if bestNum > v
+                    then minHelper xs 0 v
+                    else minHelper xs (bestIndex-1) bestNum)
+  }
+
+
+// runTree takes a row of parameters and a tree and returns the 
+// value that the tree predicts for this row.
+function runTree
+  (row  : bool list)
+  (tree : num tree)
+  : bool
+  {
+    case tree of
+      Node t1 p t2 => let (b,row') = row!p;
+                      runTree row' (if b then t1 else t2)
+    | Leaf b       => b
+  }
+
+
+// testTree takes a set of rows and a tree and returns the number of 
+// times the tree incorrectly predicted the label for a row.
+function testTree
+  (db : (bool list) bag)
+  (tree : num tree)
+  : Circle num
+  {
+    let (suc,fail) = splitDB (fun row => let (b,row') = row!0;
+                                         runTree row' tree == b);
+    sample count = add_exp_noise (countDB fail)
+    return count;
+  }
+
+
+// chooseBestTree finds the best tree among those provided
+// so long as it's better than the base tree's error adjusted 
+// by the user provided function.
+function chooseBestTree
+  (tree : num tree)             // the base tree
+  (cutoffMod : num -> num)      // the amount of error to beat
+  (trees : (num tree) list)     // the input trees
+  (db :[1] (bool list) bag)     // the database
+  : Circle (1 + num tree)       // new tree if there is one
+  {
+    let berror = testTree db tree;
+    let errors = map (fun t => testTree db t) trees;
+    let mindex = min (cutoffMod berror :: errors);
+    case mindex of
+      Z   => return Left ()
+      S n => return (index (Leaf True) n trees)
+  }
+
+
+// This green zone function calls chooseBestTree until a desired metric 
+// is reached.
+function generateDecisionTree
+  (k : num)
+  : num tree
+  { generateDecisionTreeHelper k (Leaf True) }
+function generateDecisionTreeHelper
+  (k : num)
+  (t : num tree)
+  : num tree
+  {
+    let trees = makeTrees [1 .. k] tree;
+    let myfun = (fun x => /*function of x, length trees, and perhaps the current d/e budget*/)
+    let rz = execInRedZone (chooseBestTree tree myfun trees);
+    case rz of
+      Left () => t
+      Right (mt', d, e) => case mt' of
+        Left ()  => t
+        Right t' => generateDecisionTreeHelper k t'
+  }
+
+
+// makeTrees takes a list of unused parameters (initially [1..k])
+// and a tree and constructs a list of all possible trees that are 
+// have exactly one more node.
+function makeTrees
+  (params : num list)
+  (tree : num tree)
+  : (num tree) list
+  {
+    case tree of
+      Node t1 p t2 => 
+        let params' = remove p params
+        in  map (fun t => Node t  p t2) (makeTrees params' t1) ++
+            map (fun t => Node t1 p t)  (makeTrees params' t2) ++
+    | Leaf _       => 
+        concatmap (fun p => [Node (Leaf True)  p (Leaf False),
+                             Node (Leaf False) p (Leaf True)])
+                  params
+  }
+

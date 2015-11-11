@@ -16,9 +16,7 @@ Inductive simList {X:Type} : nat -> list X -> list X -> Prop :=
   | simL_consL h l1 l2 : forall d, simList d l1 l2
                          -> simList (S d) (cons h l1) l2
   | simL_consR h l1 l2 : forall d, simList d l1 l2
-                         -> simList (S d) l1 (cons h l2)
-  | simL_weak l1 l2    : forall d, simList d l1 l2 
-                         -> simList (S d) l1 l2.
+                         -> simList (S d) l1 (cons h l2).
 
 Example simEx1 : simList 1 [1;2] [2].
 Proof. apply simL_consL. apply simL_eq. reflexivity. Qed.
@@ -40,14 +38,22 @@ Inductive simNat : nat -> nat -> nat -> Prop :=
   | simN_eq n1 n2   : forall d, eq_nat n1 n2 -> simNat d n1 n2
   | simN_S n1 n2    : forall d, simNat d n1 n2 -> simNat d (S n1) (S n2)
   | simN_l n1 n2    : forall d, simNat d n1 n2 -> simNat (S d) (S n1) n2
-  | simN_r n1 n2    : forall d, simNat d n1 n2 -> simNat (S d) n1 (S n2)
-  | simN_weak n1 n2 : forall d, simNat d n1 n2 -> simNat (S d) n1 n2.
+  | simN_r n1 n2    : forall d, simNat d n1 n2 -> simNat (S d) n1 (S n2).
 
 Lemma simNatPlus : forall (d n s1 s2 : nat),
   simNat d s1 s2 -> simNat d (n+s1) (n+s2).
 Proof. intros d n s1 s2 H. induction n as [| n' IHn].
   simpl. apply H.
   simpl. apply simN_S. apply IHn.
+Qed.
+
+Lemma simNatWeak : forall d n1 n2,
+  simNat d n1 n2 -> simNat (S d) n1 n2.
+Proof. intros d n1 n2 H. induction H.
+  Case "eq". apply simN_eq. apply H.
+  Case "S". apply simN_S. apply IHsimNat.
+  Case "l". apply simN_l. apply IHsimNat.
+  Case "r". apply simN_r. apply IHsimNat.
 Qed.
 
 
@@ -71,8 +77,7 @@ Proof. intros Arg Arg' d HListSim HArgClip HArg'Clip.
 induction HListSim as [l1 l2 d eq |
                        h l1 l2 d HListSim' IHLS|
                        h l1 l2 d HListSim' IHLS|
-                       h l1 l2 d HListSim' IHLS|
-                       h l1 l2 d IHd].
+                       h l1 l2 d HListSim' IHLS].
   Case "eq".
     rewrite eq. apply simN_eq. apply eq_nat_refl.
   Case "cons".
@@ -89,7 +94,7 @@ induction HListSim as [l1 l2 d eq |
       apply HLTTail. apply HArg'Clip.
     SCase "head is 0".
       inversion HLT0.
-      simpl. apply simN_weak. apply IHLS.
+      simpl. apply simNatWeak. apply IHLS.
         apply HLTTail. apply HArg'Clip.
   Case "consR".
     inversion HArg'Clip as [ | x l HLT1 HLTTail].
@@ -99,11 +104,8 @@ induction HListSim as [l1 l2 d eq |
       apply HArgClip. apply HLTTail.
     SCase "head is 0".
       inversion HLT0.
-      simpl. apply simN_weak. apply IHLS.
+      simpl. apply simNatWeak. apply IHLS.
         apply HArgClip. apply HLTTail.
-  Case "weakening".
-    apply simN_weak. apply IHd.
-    apply HArgClip. apply HArg'Clip.
 Qed.
     
 
