@@ -18,8 +18,8 @@ This will be some sort of concatmap over a fold.
 
 Missing Features:
 - proper definition of the tree data type
-- add_exp_noise
-- execRedZone (fun : db -o A) : (1 + (A, delta, epsilon))
+- expChoose : (db -o A -> num) -> list(A) -> db -o Circle A
+- execRedZone (db -o A) : (1 + (A, delta, epsilon))
 
 */
 
@@ -126,13 +126,13 @@ function chooseBestTree
   (db :[] db)                   // the database
   : Circle (1 + tree(num))      // new tree if there is one
   {
-    let berror = testTree db tree;
-    let errors = map (fun t => testTree db t) trees;    // Is this typed right?
-    let mindex = min (cutoffMod berror :: errors);
-    case mindex of
-      Z   => return (Left ())
-      S n => return (index (Leaf True) n trees)
+    sample tree' = expChoose testTree (tree :: trees) db // note that we should somehow amend testTree with cutoffMod
+    case tree == tree' of
+      True   => return (Left ())
+      False => return (Right tree')
   }
+
+
 
 
 // This green zone function calls chooseBestTree until a desired metric 
