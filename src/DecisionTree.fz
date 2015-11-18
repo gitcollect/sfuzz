@@ -7,26 +7,28 @@ type 'a tree =
 
 type delta = num
 type epsilon = num
+type db = (bool list) bag
 
 /*
 A database row is a list of bools.  The 0-indexed value is 
- the label, and the parameters are indexed 1 through k.
+the label, and the parameters are indexed 1 through k.
 We need a function to make all the possible trees.
 There will be k*(number of leaves) possible trees.
 This will be some sort of concatmap over a fold.
 
 Missing Features:
-- case support for trees
+- proper definition of the tree data type
 - add_exp_noise
-- execRedZone (fun : (bool list) bag -o[1] 'a) : (1 + ('a, delta, epsilon))
+- execRedZone (fun : db -o A) : (1 + (A, delta, epsilon))
 
 */
 
 // A list removal function
+// remove : list(A) -o num -> list(A)
 function remove
-  (lst :[1] 'a list)
+  (lst :[] list(A))
   (ind : nat)
-  : 'a list
+  : list(A)
   {
     case lst of
       []    => []
@@ -40,11 +42,12 @@ function remove
 // the same list but with the indexed value now fixed as the default 
 // value.  If the index is out of bounds, this returns the given 
 // default value.
+// index : A -> list(A) -o num -> (A, list(A))
 function index
-  (def : 'a)
-  (lst :[1] 'a list)
+  (def : A)
+  (lst :[] list(A))
   (ind : nat)
-  : ('a, 'a list)
+  : (A, list(A))
   {
     case lst of
       []    => (def, [])
@@ -55,47 +58,43 @@ function index
   }
 
 
-// An infix version of index specialized to bool with default = False.
-function !
-  (lst : bool list)
-  (ind : nat)
-  : (bool, bool list)
-  { index False lst ind }
 
-
-// A min function over Circle nums.
+// A min function over nums.
+// min : list(num) -> nat
 function min
-  (lst :[s] (Circle num) list)
-  :[1] nat
+  (lst : list(num))
+  : nat
   {
     case lst of
       []    => (0,0)
       x::xs => minHelper xs 0 x
   }
+// minHelper : list(num) -> nat -> num -> nat
 function minHelper
-  (lst : (Circle num) list)
+  (lst : list(num))
   (bestIndex : nat)
   (bestNum : num)
   : nat
   {
     case lst of
       []    => bestIndex - 1
-      x::xs => sample v = x;
+      x::xs => let v = x;
                1 + (if bestNum > v
-                    then minHelper xs 0 v
-                    else minHelper xs (bestIndex-1) bestNum)
+                    then { minHelper xs 0 v }
+                    else { minHelper xs (bestIndex-1) bestNum) }
   }
 
 
 // runTree takes a row of parameters and a tree and returns the 
 // value that the tree predicts for this row.
+// runTree : list(bool) -o tree(num) -> bool
 function runTree
-  (row  : bool list)
-  (tree : num tree)
+  (row  :[] list(bool))
+  (tree : tree(num))
   : bool
   {
     case tree of
-      Node t1 p t2 => let (b,row') = row!p;
+      Node t1 p t2 => let (b,row') = index False row p;
                       runTree row' (if b then t1 else t2)
     | Leaf b       => b
   }
@@ -103,12 +102,13 @@ function runTree
 
 // testTree takes a set of rows and a tree and returns the number of 
 // times the tree incorrectly predicted the label for a row.
+// testTree : db -o tree(num) -> Circle num
 function testTree
-  (db : (bool list) bag)
-  (tree : num tree)
+  (db :[] db)
+  (tree : tree(num))
   : Circle num
   {
-    let (suc,fail) = splitDB (fun row => let (b,row') = row!0;
+    let (suc,fail) = splitDB (fun row => let (b,row') = index False row 0;
                                          runTree row' tree == b);
     sample count = add_exp_noise (countDB fail)
     return count;
@@ -118,18 +118,19 @@ function testTree
 // chooseBestTree finds the best tree among those provided
 // so long as it's better than the base tree's error adjusted 
 // by the user provided function.
+// chooseBestTree : tree(num) -> (num -> num) -> list(tree(num)) -> db -o Circle (1 + tree(num))
 function chooseBestTree
-  (tree : num tree)             // the base tree
+  (tree : tree(num))            // the base tree
   (cutoffMod : num -> num)      // the amount of error to beat
-  (trees : (num tree) list)     // the input trees
-  (db :[1] (bool list) bag)     // the database
-  : Circle (1 + num tree)       // new tree if there is one
+  (trees : list(tree(num)))     // the input trees
+  (db :[] db)                   // the database
+  : Circle (1 + tree(num))      // new tree if there is one
   {
     let berror = testTree db tree;
-    let errors = map (fun t => testTree db t) trees;
+    let errors = map (fun t => testTree db t) trees;    // Is this typed right?
     let mindex = min (cutoffMod berror :: errors);
     case mindex of
-      Z   => return Left ()
+      Z   => return (Left ())
       S n => return (index (Leaf True) n trees)
   }
 
